@@ -13,7 +13,7 @@ class ArucoDetector:
     def __init__(self, marker_length = 0.03):
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber("/depstech/image_raw", Image, self.image_callback)
-        self.poses_pub = rospy.Publisher("/aruco/pose", MarkerPoseArray, queue_size=10)
+        self.poses_pub = rospy.Publisher("/aruco/marker_poses", MarkerPoseArray, queue_size=10)
 
         # Camera calibration parameters (Replace with actual parameters)
         self.camera_matrix = np.array([[473.3367332805383, 0, 322.566293310943], [0, 474.3457171142228, 237.8821653705013], [0, 0, 1]])
