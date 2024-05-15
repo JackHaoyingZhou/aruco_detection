@@ -10,7 +10,7 @@ import numpy as np
 import tf
 
 class ArucoDetector:
-    def __init__(self, marker_length = 0.03):
+    def __init__(self, marker_length = 0.03, show_image=True):
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber("/depstech/image_raw", Image, self.image_callback)
         self.poses_pub = rospy.Publisher("/aruco/marker_poses", MarkerPoseArray, queue_size=10)
@@ -22,6 +22,7 @@ class ArucoDetector:
         self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
         self.aruco_params = aruco.DetectorParameters_create()
         self.marker_length = marker_length
+        self.show_img = show_image
 
     def image_callback(self, data):
         try:
@@ -41,13 +42,14 @@ class ArucoDetector:
                 marker_id = ids[i][0]
                 rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corner, self.marker_length, self.camera_matrix, self.dist_coeffs)
 
-                aruco.drawDetectedMarkers(cv_image, corners)
-                aruco.drawAxis(cv_image, self.camera_matrix, self.dist_coeffs, rvec, tvec, 0.1)
+                if self.show_img:
+                    aruco.drawDetectedMarkers(cv_image, corners)
+                    aruco.drawAxis(cv_image, self.camera_matrix, self.dist_coeffs, rvec, tvec, 0.1)
 
-                # Draw the ID of the marker
-                c = corner[0][0]
-                cv2.putText(cv_image, str(marker_id), (int(c[0]), int(c[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                            (0, 255, 0), 2, cv2.LINE_AA)
+                    # Draw the ID of the marker
+                    c = corner[0][0]
+                    cv2.putText(cv_image, str(marker_id), (int(c[0]), int(c[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                (0, 255, 0), 2, cv2.LINE_AA)
 
                 marker_pose = MarkerPose()
                 marker_pose.id = marker_id
@@ -71,8 +73,9 @@ class ArucoDetector:
 
         self.poses_pub.publish(marker_pose_array)
 
-        cv2.imshow("Image Window", cv_image)
-        cv2.waitKey(3)
+        if self.show_img:
+            cv2.imshow("Image Window", cv_image)
+            cv2.waitKey(1)
 
     @staticmethod
     def rotation_matrix_to_quaternion(rot_matrix):
