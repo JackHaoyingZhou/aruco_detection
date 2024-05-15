@@ -1,100 +1,80 @@
 import rospy
-from std_msgs.msg import Header
-from geometry_msgs.msg import PoseStamped
 import cv2
+import cv2.aruco as aruco
+from cv_bridge import CvBridge, CvBridgeError
+from sensor_msgs.msg import Image
+from geometry_msgs.msg import Pose, PoseArray
 import numpy as np
 import tf
 
-# Load the predefined dictionary
-aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_250)
+class ArucoDetector:
+    def __init__(self):
+        self.bridge = CvBridge()
+        self.image_sub = rospy.Subscriber("/depstech/image_raw", Image, self.image_callback)
+        self.poses_pub = rospy.Publisher("/aruco/pose", PoseArray, queue_size=10)
 
-# Initialize the detector parameters using default values
-parameters = cv2.aruco.DetectorParameters_create()
+        # Camera calibration parameters (Replace with actual parameters)
+        self.camera_matrix = np.array([[473.3367332805383, 0, 322.566293310943], [0, 474.3457171142228, 237.8821653705013], [0, 0, 1]])
+        self.dist_coeffs = np.array([0.04628682088784457, -0.0804026062935555, 0.003725307136288697, 0.002703884650555371, 0])
 
-# Load the camera calibration parameters (camera matrix and distortion coefficients)
-camera_matrix = np.array([[473.3367332805383, 0, 322.566293310943], 
-                          [0, 474.3457171142228, 237.8821653705013], 
-                          [0, 0, 1]])
-dist_coeffs = np.array([0.04628682088784457, -0.0804026062935555, 0.003725307136288697, 0.002703884650555371, 0])
+        self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
+        self.aruco_params = aruco.DetectorParameters_create()
+        self.marker_length = 0.03
 
-# Marker length (in meters)
-markerLength = 0.03
+    def image_callback(self, data):
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+        except CvBridgeError as e:
+            rospy.logerr(e)
+            return
 
-# Initialize ROS node
-rospy.init_node('aruco_detector', anonymous=True)
+        gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
 
-# Publisher for pose
-pose_pub = rospy.Publisher('/aruco_pose', PoseStamped, queue_size=10)
+        pose_array = PoseArray()
 
-# Capture video from the default camera
-cap = cv2.VideoCapture(0,cv2.CAP_V4L2)
+        if ids is not None:
+            for corner, marker_id in zip(corners, ids):
+                rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corner, self.marker_length, self.camera_matrix, self.dist_coeffs)
 
-width = 1280
-height = 720
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                aruco.drawDetectedMarkers(cv_image, corners)
+                aruco.drawAxis(cv_image, self.camera_matrix, self.dist_coeffs, rvec, tvec, 0.1)
 
-def average_poses(rvecs, tvecs):
-    rvec_avg = np.mean(rvecs, axis=0)
-    tvec_avg = np.mean(tvecs, axis=0)
-    return rvec_avg, tvec_avg
+                pose = Pose()
+                pose.position.x = tvec[0][0][0]
+                pose.position.y = tvec[0][0][1]
+                pose.position.z = tvec[0][0][2]
 
-def publish_pose(rvec, tvec):
-    pose = PoseStamped()
-    pose.header = Header()
-    pose.header.stamp = rospy.Time.now()
-    pose.header.frame_id = "camera"
+                rot_matrix, _ = cv2.Rodrigues(rvec)
+                # quat = self.rotation_matrix_to_quaternion(rot_matrix)
+                quat = tf.transformations.quaternion_from_matrix(np.vstack((np.hstack((rot_matrix, [[0], [0], [0]])), [0, 0, 0, 1])))
 
-    pose.pose.position.x = tvec[0][0]
-    pose.pose.position.y = tvec[0][1]
-    pose.pose.position.z = tvec[0][2]
+                pose.orientation.x = quat[0]
+                pose.orientation.y = quat[1]
+                pose.orientation.z = quat[2]
+                pose.orientation.w = quat[3]
 
-    # Convert rotation vector to quaternion
-    rotation_matrix, _ = cv2.Rodrigues(rvec)
-    quaternion = tf.transformations.quaternion_from_matrix(
-        np.vstack((np.hstack((rotation_matrix, [[0], [0], [0]])), [0, 0, 0, 1]))
-    )
+                pose_array.poses.append(pose)
 
-    pose.pose.orientation.x = quaternion[0]
-    pose.pose.orientation.y = quaternion[1]
-    pose.pose.orientation.z = quaternion[2]
-    pose.pose.orientation.w = quaternion[3]
+        self.poses_pub.publish(pose_array)
 
-    pose_pub.publish(pose)
+        cv2.imshow("Image Window", cv_image)
+        cv2.waitKey(3)
 
-while not rospy.is_shutdown() and cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+    @staticmethod
+    def rotation_matrix_to_quaternion(rot_matrix):
+        q = np.zeros((4,))
+        q[0] = np.sqrt(1.0 + rot_matrix[0, 0] + rot_matrix[1, 1] + rot_matrix[2, 2]) / 2.0
+        q[1] = (rot_matrix[2, 1] - rot_matrix[1, 2]) / (4.0 * q[0])
+        q[2] = (rot_matrix[0, 2] - rot_matrix[2, 0]) / (4.0 * q[0])
+        q[3] = (rot_matrix[1, 0] - rot_matrix[0, 1]) / (4.0 * q[0])
+        return q
 
-    # Convert frame to grayscale
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-    # Detect markers
-    corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-
-    # If markers are detected
-    if ids is not None:
-        # Draw detected markers
-        frame = cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-
-        # Estimate pose of each marker
-        rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, markerLength, camera_matrix, dist_coeffs)
-
-        # Average poses for improved accuracy
-        rvec_avg, tvec_avg = average_poses(rvecs, tvecs)
-
-        # Draw axis for the averaged pose
-        frame = cv2.aruco.drawAxis(frame, camera_matrix, dist_coeffs, rvec_avg, tvec_avg, 0.1)
-
-        # Publish the averaged pose
-        publish_pose(rvec_avg, tvec_avg)
-
-    # Display the resulting frame
-    cv2.imshow('frame', frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+if __name__ == '__main__':
+    rospy.init_node('aruco_detector', anonymous=True)
+    aruco_detector = ArucoDetector()
+    try:
+        rospy.spin()
+    except KeyboardInterrupt:
+        rospy.loginfo("Shutting down")
+    cv2.destroyAllWindows()
