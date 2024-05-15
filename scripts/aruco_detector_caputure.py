@@ -29,8 +29,8 @@ pose_pub = rospy.Publisher('/aruco_pose', PoseStamped, queue_size=10)
 # Capture video from the default camera
 cap = cv2.VideoCapture(0,cv2.CAP_V4L2)
 
-width = 1280
-height = 720
+width = 640
+height = 480
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
