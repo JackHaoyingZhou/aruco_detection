@@ -18,15 +18,6 @@ class ArucoDetector:
         self.camera_matrix = None
         self.dist_coeffs = None
         self.cam_info_sub = rospy.Subscriber("/depstech/camera_info", CameraInfo, self.cam_info_callback)
-
-        # Camera calibration parameters (Replace with actual parameters)
-        # ### Resolution 640x480
-        # self.camera_matrix = np.array([[473.3367332805383, 0, 322.566293310943], [0, 474.3457171142228, 237.8821653705013], [0, 0, 1]])
-        # self.dist_coeffs = np.array([0.04628682088784457, -0.0804026062935555, 0.003725307136288697, 0.002703884650555371, 0])
-        ### Resolution 1920x1080
-        # self.camera_matrix = np.array([[1385.028140590321, 0, 955.4500270595406], [0, 1385.351119497739, 554.4595336260797], [0, 0, 1]])
-        # self.dist_coeffs = np.array([0.02024597608444936, -0.02813994245597098, 0.007704806741131997, -0.003215620743876961, 0])
-
         self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
         self.aruco_params = aruco.DetectorParameters_create()
         self.marker_length = marker_length
@@ -34,7 +25,7 @@ class ArucoDetector:
 
     def cam_info_callback(self, msg):
         intrinsic_mtx = np.array(msg.K).reshape((3, 3))
-        distortion_vec = np.array(msg.D)
+        distortion_vec = np.array(msg.D).reshape((-1, 1))
         self.camera_matrix = intrinsic_mtx
         self.dist_coeffs = distortion_vec
 
