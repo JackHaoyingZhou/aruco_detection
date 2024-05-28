@@ -13,15 +13,15 @@ import tf
 class ArucoDetector:
     def __init__(self, marker_length = 0.03, show_image=False):
         self.bridge = CvBridge()
-        # self.image_sub = rospy.Subscriber("/depstech/image_raw", Image, self.image_callback)
+        self.image_sub = rospy.Subscriber("/depstech/image_raw", Image, self.image_callback)
         # self.image_sub = rospy.Subscriber("/realsense/image_raw", Image, self.image_callback)
-        self.image_sub = rospy.Subscriber("/logitech/image_raw", Image, self.image_callback)
+        # self.image_sub = rospy.Subscriber("/logitech/image_raw", Image, self.image_callback)
         self.poses_pub = rospy.Publisher("/aruco/marker_poses", MarkerPoseArray, queue_size=1)
         self.camera_matrix = None
         self.dist_coeffs = None
-        # self.cam_info_sub = rospy.Subscriber("/depstech/camera_info", CameraInfo, self.cam_info_callback)
+        self.cam_info_sub = rospy.Subscriber("/depstech/camera_info", CameraInfo, self.cam_info_callback)
         # self.cam_info_sub = rospy.Subscriber("/realsense/camera_info", CameraInfo, self.cam_info_callback)
-        self.cam_info_sub = rospy.Subscriber("/logitech/camera_info", CameraInfo, self.cam_info_callback)
+        # self.cam_info_sub = rospy.Subscriber("/logitech/camera_info", CameraInfo, self.cam_info_callback)
         self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
         self.aruco_params = aruco.DetectorParameters_create()
         self.marker_length = marker_length
