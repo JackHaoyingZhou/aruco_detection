@@ -9,20 +9,21 @@ from aruco_detection.msg import MarkerPoseArray
 from sensor_msgs.msg import CameraInfo
 import numpy as np
 import tf
+import argparse
 
 class ArucoDetector:
-    def __init__(self, marker_length = 0.03, show_image=False):
+    def __init__(self, camera_ns=None, aruco_dict=None, marker_length = 0.03, show_image=False):
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber("/depstech/image_raw", Image, self.image_callback)
-        # self.image_sub = rospy.Subscriber("/realsense/image_raw", Image, self.image_callback)
-        # self.image_sub = rospy.Subscriber("/logitech/image_raw", Image, self.image_callback)
+        assert camera_ns is not None, 'Please specify the camera namespace!'
+        assert aruco_dict is not None, 'Please specify the Aruco marker style!'
+        camera_image_topic = camera_ns + "/image_raw"
+        camera_info_topic = camera_ns + "/camera_info"
+        self.image_sub = rospy.Subscriber(camera_image_topic, Image, self.image_callback)
         self.poses_pub = rospy.Publisher("/aruco/marker_poses", MarkerPoseArray, queue_size=1)
         self.camera_matrix = None
         self.dist_coeffs = None
-        self.cam_info_sub = rospy.Subscriber("/depstech/camera_info", CameraInfo, self.cam_info_callback)
-        # self.cam_info_sub = rospy.Subscriber("/realsense/camera_info", CameraInfo, self.cam_info_callback)
-        # self.cam_info_sub = rospy.Subscriber("/logitech/camera_info", CameraInfo, self.cam_info_callback)
-        self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
+        self.cam_info_sub = rospy.Subscriber(camera_info_topic, CameraInfo, self.cam_info_callback)
+        self.aruco_dict = aruco_dict
         self.aruco_params = aruco.DetectorParameters_create()
         self.marker_length = marker_length
         self.show_img = show_image
@@ -100,8 +101,53 @@ class ArucoDetector:
         return q
 
 if __name__ == '__main__':
+    # parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--camera-namespace",
+        type=str,
+        default='/depstech',
+        help="ROS namespace for the camera",
+    )
+    parser.add_argument(
+        "-m",
+        "--marker-size",
+        type=str,
+        default=0.03,
+        help="The Aruco markers size",
+    )
+    parser.add_argument(
+        "-t",
+        "--target-style",
+        type=str,
+        default=1,
+        help="the Aruco marker style",
+    )
+    parser.add_argument(
+        '-i',
+        '--show-image',
+        action='store_true',
+        help='specify if show the images when detection'
+    )
+    args = parser.parse_args()
+
+    cam_name = args.camera_namespace
+    marker_size = float(args.marker_size)
+    marker_style = int(args.target_style)
+    show_img_flag = args.show_image
+
+    ### Define the Aruco Dict if you need any additional style please add there
+    if marker_style == 1:
+        aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
+    elif marker_style == 2:
+        aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
+    else:
+        print('Invalid Aruco Marker Type Input !')
+        aruco_dict=None
+
     rospy.init_node('aruco_detector', anonymous=True)
-    aruco_detector = ArucoDetector()
+    aruco_detector = ArucoDetector(camera_ns=cam_name, aruco_dict=aruco_dict, marker_length=marker_size, show_image=show_img_flag)
     try:
         rospy.spin()
     except KeyboardInterrupt:
